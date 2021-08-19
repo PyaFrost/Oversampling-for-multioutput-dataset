@@ -2,7 +2,6 @@ import time
 import random
 import numpy as np
 import pandas as pd
-from tqdm.notebook import tqdm
 import matplotlib.pyplot as plt
 from multiprocessing.pool import Pool
 from sklearn.model_selection import train_test_split
@@ -10,12 +9,9 @@ from sklearn.model_selection import train_test_split
 def oversampling_multioutput_low(df_feat,df_lab,n_para=None,k=5,n_iter_max=100,norm=2):
     n=df_lab.shape[0]
     q=df_lab.shape[1]
-    #Stockage noms des colonnes des df
     columns_df_lab=list(df_lab.columns)
     columns_df_feat=list(df_feat.columns)
-    #Calcul du vecteur total des poids
     v_sum=sum(df_lab.values)
-    #Calcul du palier, de la classe majoritaire et création du vecteur des labels ayant atteint le palier
     treshold=max(v_sum)
     ind_treshold=np.where(v_sum==treshold).index(0)
     vec_reach_treshold=[ind_treshold]
@@ -24,19 +20,14 @@ def oversampling_multioutput_low(df_feat,df_lab,n_para=None,k=5,n_iter_max=100,n
     v_sum_not_reach=list(np.copy(v_sum))
     del v_sum_not_reach[ind_treshold]
     v_sum_not_reach=np.array(v_sum_not_reach)
-    #Isolation des indices dont la classe majoritaire du vecteur des labels n'a pas atteint le palier
     ind_to_keep=[i for i in range(n) if np.where(df_lab.iloc[i].values==max(df_lab.iloc[i].values))[0][0] in vec_not_reach]
     n_iter=0
     ind_new=n_para
-    #Boucle avec condition d'arrêt telle que n_iter_max atteint 
-    #ou toutes les classes ont atteint le palier
     while n_iter<n_iter_max and vec_not_reach!=[] and ind_to_keep!=[]:
         n_iter+=1
-        #Choix aléatoire d'un point dans les indices réduits et récupération de ses features et labels
         r=int(random.choice(ind_to_keep))
         base_point_lab=df_lab.iloc[r].values
         base_point_feat=df_feat.iloc[r].values
-        #Calcul et stockage des k plus proches voisins
         k_n=np.empty((k,2))
         ind_to_use=[i for i in ind_to_keep if i!=r]
         j=0
@@ -49,14 +40,10 @@ def oversampling_multioutput_low(df_feat,df_lab,n_para=None,k=5,n_iter_max=100,n
             if d<m:
                 k_n[np.where(k_n==m)[0][0],:]=[i,d]
                 m=max(k_n[:,1])
-        #Choix aléatoire d'un point parmi les plus proches voisins
         r_2=random.randint(0,k-1)
         random_neighboor_lab=df_lab.iloc[int(k_n[r_2,0])].values
         random_neighboor_feat=df_feat.iloc[int(k_n[r_2,0])].values
-        #Poids aléatoire entre 0 et 1 et calcul labels et features du nouveau point
         w=random.random()
-        #newpoint_feat=w*base_point_feat+(1-w)*random_neighboor_feat
-        #newpoint_lab=w*base_point_lab+(1-w)*random_neighboor_lab
         newpoint_feat=w**2*random_neighboor_feat+(1-w**2)*base_point_feat
         newpoint_lab=w**2*random_neighboor_lab+(1-w**2)*base_point_lab
         #Ajout du point aux data-frames
@@ -65,7 +52,6 @@ def oversampling_multioutput_low(df_feat,df_lab,n_para=None,k=5,n_iter_max=100,n
         new_lab_row=pd.DataFrame([tuple(newpoint_lab)],columns=columns_df_lab,index=[ind_new])
         df_lab=df_lab.append(new_lab_row,ignore_index=False)
         ind_new+=1
-        #Actualisation des vecteurs somme, vecteurs classes qui atteignent le palier et indices à conserver
         v_sum_not_reach=np.add(v_sum_not_reach,newpoint_lab[vec_not_reach])
         v_sum=np.add(v_sum,newpoint_lab)
         if any(item>treshold for item in v_sum_not_reach):
@@ -81,7 +67,6 @@ def oversampling_multioutput_low(df_feat,df_lab,n_para=None,k=5,n_iter_max=100,n
 def oversampling_multioutput_para(df_feat,df_lab,k=5,n_iter_max=100,norm=2,n_jobs=8):
     print('Operating oversampling multithreading ...', end=' ')
     start_time=time.time()
-    #Vérification des entrées
     if type(df_feat)!=pd.core.frame.DataFrame:
         raise Exception('df_feat must be a DataFrame')
     elif type(df_lab)==pd.core.frame.DataFrame:
@@ -103,7 +88,6 @@ def oversampling_multioutput_para(df_feat,df_lab,k=5,n_iter_max=100,norm=2,n_job
         norm=2
         print("\nnorm should be a number >1 or 'inf'\ndefault standard : 2")
     if n_jobs>1:
-        #Split du dataframe en n_jobs dataframe aléatoires
         len_set=n//n_jobs
         rest=n%n_jobs
         ind_usbl=[int(item) for item in df_lab.index.to_list()]
@@ -116,14 +100,12 @@ def oversampling_multioutput_para(df_feat,df_lab,k=5,n_iter_max=100,norm=2,n_job
             list_df_feat.append(df_feat.iloc[ind_tmp].copy())
             list_df_lab.append(df_lab.iloc[ind_tmp].copy())
             ind_usbl=[i for i in ind_usbl if i not in ind_tmp]
-        #Multi threading de la fonction oversampling pour chaque df
         p = Pool()
         args=[(list_df_feat[i],list_df_lab[i],n,k,n_iter_max,norm) for i in range(len(list_df_feat))]
         with p:
             all_df = p.starmap(oversampling_multioutput_low, args)
         p.close()
         p.join()
-        #Assemblage des n_jobs df obtenus
         new_df_feat=all_df[0][0]
         new_df_lab=all_df[0][1]
         for i in range(n_jobs-1):
