@@ -1,3 +1,9 @@
+import time
+import random
+import numpy as np
+import pandas as pd
+from tqdm.notebook import tqdm
+
 def oversampling_multioutput_full(df_feat,df_lab,k=5,n_iter_max=100,norm=2,verbose=False):
     if type(df_feat)!=pd.core.frame.DataFrame:
         raise Exception('df_feat must be a DataFrame')
